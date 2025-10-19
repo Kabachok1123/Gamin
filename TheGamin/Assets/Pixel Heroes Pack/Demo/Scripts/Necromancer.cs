@@ -1,103 +1,129 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class Necromancer : MonoBehaviour {
+public class Necromancer : MonoBehaviour
+{
+    [SerializeField] float m_speed = 4.0f;
+    [SerializeField] float m_jumpForce = 7.5f;
+    [SerializeField] bool m_noBlood = false;
+    [SerializeField] private float m_attackCooldown = 1.0f;
+    [SerializeField] private float m_spellCooldown = 2.0f; 
 
-    [SerializeField] float      m_speed = 4.0f;
-    [SerializeField] float      m_jumpForce = 7.5f;
-    [SerializeField] bool       m_noBlood = false;
+    private float attackTimer = 0f;
+    private float spellTimer = 0f;
 
-    private Animator            m_animator;
-    private Rigidbody2D         m_body2d;
-    private Sensor_PixelHeroes  m_groundSensor;
-    private bool                m_grounded = false;
-    private float               m_delayToIdle = 0.0f;
+    private Animator m_animator;
+    private Rigidbody2D m_body2d;
+    private Sensor_PixelHeroes m_groundSensor;
+    private bool m_grounded = false;
+    private float m_delayToIdle = 0.0f;
 
-    // Use this for initialization
-    void Start ()
+    // === Новые переменные ===
+    private bool m_canMove = true;
+    private float m_attackLockTimer = 0f;
+
+    void Start()
     {
         m_animator = GetComponent<Animator>();
         m_body2d = GetComponent<Rigidbody2D>();
         m_groundSensor = transform.Find("GroundSensor").GetComponent<Sensor_PixelHeroes>();
     }
 
-    // Update is called once per frame
-    void Update ()
+    void Update()
     {
-        //Check if character just landed on the ground
+        if (attackTimer > 0)
+            attackTimer -= Time.deltaTime;
+        if (spellTimer > 0)
+            spellTimer -= Time.deltaTime;
+        // === Таймер блокировки движения после атаки ===
+        if (!m_canMove)
+        {
+            m_attackLockTimer -= Time.deltaTime;
+            if (m_attackLockTimer <= 0f)
+                m_canMove = true;
+        }
+
+        // === Проверка касания земли ===
         if (!m_grounded && m_groundSensor.State())
         {
             m_grounded = true;
             m_animator.SetBool("Grounded", m_grounded);
         }
-
-        //Check if character just started falling
-        if (m_grounded && !m_groundSensor.State())
+        else if (m_grounded && !m_groundSensor.State())
         {
             m_grounded = false;
             m_animator.SetBool("Grounded", m_grounded);
         }
 
-        // -- Handle input and movement --
-        float inputX = Input.GetAxis("Horizontal");
+        // === Обработка движения ===
+        float inputX = 0f;
 
-        // Swap direction of sprite depending on walk direction
+        // Можно двигаться, если не заблокирован или если в воздухе
+        if (m_canMove || !m_grounded)
+            inputX = Input.GetAxis("Horizontal");
+
+        // Поворот спрайта
         if (inputX > 0)
             GetComponent<SpriteRenderer>().flipX = false;
         else if (inputX < 0)
             GetComponent<SpriteRenderer>().flipX = true;
 
-        // Move
-        m_body2d.velocity = new Vector2(inputX * m_speed, m_body2d.velocity.y);
+        // Движение
+        m_body2d.linearVelocity = new Vector2(inputX * m_speed, m_body2d.linearVelocity.y);
 
-        //Set AirSpeed in animator
-        m_animator.SetFloat("AirSpeedY", m_body2d.velocity.y);
+        // Скорость по оси Y для анимации
+        m_animator.SetFloat("AirSpeedY", m_body2d.linearVelocity.y);
 
-        // -- Handle Animations --
-        //Death
-        if (Input.GetKeyDown("e"))
+        // // === Обработка действий ===
+        // if (Input.GetKeyDown("e"))
+        //  {
+        //      m_animator.SetBool("noBlood", m_noBlood);
+        //      m_animator.SetTrigger("Death");
+        //  }
+        // else if (Input.GetKeyDown("q"))
+        // {
+        //     m_animator.SetTrigger("Hurt");
+        // }
+        if (Input.GetMouseButtonDown(0) && attackTimer <= 0f)
         {
-            m_animator.SetBool("noBlood", m_noBlood);
-            m_animator.SetTrigger("Death");
-        }
-            
-        //Hurt
-        else if (Input.GetKeyDown("q"))
-            m_animator.SetTrigger("Hurt");
-
-        //Attack
-        else if(Input.GetMouseButtonDown(0))
             m_animator.SetTrigger("Attack");
 
-        //Spellcast
-        else if (Input.GetMouseButtonDown(1))
-            m_animator.SetTrigger("Spellcast");
+            if (m_grounded)
+            {
+                m_canMove = false;
+                m_attackLockTimer = 0.8f;
+            }
 
-        //Jump
-        else if (Input.GetKeyDown("space") && m_grounded)
+            attackTimer = m_attackCooldown;
+        }
+        else if (Input.GetMouseButtonDown(1) && spellTimer <= 0f)
+        {
+            if (m_grounded)
+            {
+                m_canMove = false;
+                m_attackLockTimer = 1.4f;
+                m_animator.SetTrigger("Spellcast");
+            }
+            spellTimer = m_spellCooldown;
+        }
+        else if (Input.GetKeyDown("space") && m_grounded && (m_canMove || !m_grounded))
         {
             m_animator.SetTrigger("Jump");
             m_grounded = false;
             m_animator.SetBool("Grounded", m_grounded);
-            m_body2d.velocity = new Vector2(m_body2d.velocity.x, m_jumpForce);
+            m_body2d.linearVelocity = new Vector2(m_body2d.linearVelocity.x, m_jumpForce);
             m_groundSensor.Disable(0.2f);
         }
-
-        //Run
         else if (Mathf.Abs(inputX) > Mathf.Epsilon)
         {
-            // Reset timer
             m_delayToIdle = 0.05f;
             m_animator.SetInteger("AnimState", 1);
         }
-
-        //Idle
         else
         {
-            // Prevents flickering transitions to idle
             m_delayToIdle -= Time.deltaTime;
-                if(m_delayToIdle < 0)
-                    m_animator.SetInteger("AnimState", 0);
+            if (m_delayToIdle < 0)
+                m_animator.SetInteger("AnimState", 0);
         }
     }
-}
+} 

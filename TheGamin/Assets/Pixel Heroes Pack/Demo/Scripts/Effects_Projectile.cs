@@ -18,7 +18,7 @@ public class Effects_Projectile : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        body2d.velocity = new Vector2(speed * transform.localScale.x, body2d.velocity.y);
+        body2d.linearVelocity = new Vector2(speed * transform.localScale.x, body2d.linearVelocity.y);
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
